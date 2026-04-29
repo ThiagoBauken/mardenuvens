@@ -62,8 +62,9 @@ EXPOSE 3000
 # Volume p/ persistência do SQLite (montar /app/data no EasyPanel)
 VOLUME ["/app/data"]
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:3000/health || exit 1
+# EasyPanel/qualquer plataforma pode injetar PORT diferente — healthcheck respeita.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT:-3000}/health" || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "backend/dist/server.js"]
