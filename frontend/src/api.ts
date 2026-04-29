@@ -38,8 +38,12 @@ export async function fetchReportsForDate(
   id: string,
   date: string,
 ): Promise<ReportsForDateResponse> {
+  // cache: 'no-store' — UGC dinâmico, sempre fresco. Defesa redundante
+  // ao Cache-Control: no-store do servidor (alguns browsers/proxies podem
+  // ignorar o header).
   const res = await fetch(
     `/api/reports/${encodeURIComponent(id)}/${encodeURIComponent(date)}`,
+    { cache: 'no-store' },
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
