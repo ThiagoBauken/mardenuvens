@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e1a2b"/>
+      <stop offset="0.5" stop-color="#152538"/>
+      <stop offset="1" stop-color="#1a2b44"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.85" cy="0.15" r="0.6">
+      <stop offset="0" stop-color="#7dd3fc" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#7dd3fc" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mountain" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b4364"/>
+      <stop offset="1" stop-color="#152538"/>
+    </linearGradient>
+    <filter id="cloudblur">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <g opacity="0.95">
+    <path d="M 0 410 L 180 280 L 280 360 L 460 200 L 620 320 L 780 240 L 920 360 L 1080 260 L 1200 340 L 1200 630 L 0 630 Z" fill="url(#mountain)"/>
+    <path d="M 0 470 L 140 400 L 260 440 L 420 380 L 580 430 L 760 390 L 920 450 L 1080 410 L 1200 460 L 1200 630 L 0 630 Z" fill="#0e1a2b" opacity="0.7"/>
+  </g>
+
+  <g filter="url(#cloudblur)" opacity="0.92">
+    <ellipse cx="220" cy="445" rx="160" ry="22" fill="#f5f7fa"/>
+    <ellipse cx="540" cy="455" rx="200" ry="24" fill="#f5f7fa"/>
+    <ellipse cx="900" cy="445" rx="180" ry="22" fill="#f5f7fa"/>
+  </g>
+  <g opacity="0.65">
+    <ellipse cx="320" cy="445" rx="120" ry="14" fill="#f5f7fa"/>
+    <ellipse cx="720" cy="450" rx="160" ry="16" fill="#f5f7fa"/>
+    <ellipse cx="1050" cy="445" rx="120" ry="14" fill="#f5f7fa"/>
+  </g>
+
+  <g opacity="0.6">
+    <circle cx="180" cy="120" r="2.5" fill="#cbd5e1"/>
+    <circle cx="340" cy="80" r="1.8" fill="#cbd5e1"/>
+    <circle cx="640" cy="60" r="2" fill="#cbd5e1"/>
+    <circle cx="820" cy="100" r="1.5" fill="#cbd5e1"/>
+    <circle cx="1080" cy="140" r="2.2" fill="#cbd5e1"/>
+  </g>
+
+  <g transform="translate(80, 150)">
+    <text font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-weight="700" font-size="96" fill="#f5f7fa" letter-spacing="-2">
+      <tspan x="0" y="0">Mar de</tspan>
+      <tspan x="0" y="105" fill="#7dd3fc">Nuvens</tspan>
+    </text>
+    <text x="0" y="175" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="32" fill="#cbd5e1" letter-spacing="-0.5">
+      Previsão para 150+ montanhas e cânions do Brasil
+    </text>
+    <text x="0" y="225" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="22" fill="#7dd3fc" letter-spacing="0.5">
+      mardenuvens.com.br
+    </text>
+  </g>
+
+  <g transform="translate(880, 110)" opacity="0.95">
+    <circle cx="80" cy="80" r="76" fill="none" stroke="#7dd3fc" stroke-width="3" opacity="0.4"/>
+    <text x="80" y="74" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" fill="#7dd3fc" letter-spacing="3" font-weight="600">VAI TER?</text>
+    <text x="80" y="115" text-anchor="middle" font-family="system-ui, sans-serif" font-size="40" fill="#f5f7fa" font-weight="700">☁️</text>
+  </g>
+</svg>

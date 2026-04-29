@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 export type Route =
   | { kind: 'home' }
   | { kind: 'mountain'; id: string }
-  | { kind: 'compare'; ids: string[] };
+  | { kind: 'compare'; ids: string[] }
+  | { kind: 'about' };
 
 export function parseUrl(pathname: string): Route {
   const p = pathname.replace(/^\/+|\/+$/g, '');
@@ -13,6 +14,9 @@ export function parseUrl(pathname: string): Route {
 
   if (head === 'm' && rest) {
     return { kind: 'mountain', id: decodeURIComponent(rest) };
+  }
+  if (head === 'sobre') {
+    return { kind: 'about' };
   }
   if (head === 'compare' && rest) {
     const ids = rest
@@ -34,6 +38,8 @@ export function buildPath(route: Route): string {
       return `/m/${encodeURIComponent(route.id)}`;
     case 'compare':
       return `/compare/${route.ids.map(encodeURIComponent).join(',')}`;
+    case 'about':
+      return '/sobre';
   }
 }
 

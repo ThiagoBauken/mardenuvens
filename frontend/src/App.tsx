@@ -13,6 +13,9 @@ const ComparisonView = lazy(() =>
 const Highlights = lazy(() =>
   import('./components/Highlights').then((m) => ({ default: m.Highlights })),
 );
+const AboutPage = lazy(() =>
+  import('./components/AboutPage').then((m) => ({ default: m.AboutPage })),
+);
 
 function ViewFallback(): JSX.Element {
   return <div className="text-cloud-dim animate-pulse">Carregando…</div>;
@@ -63,17 +66,45 @@ export function App(): JSX.Element {
           </Suspense>
         )}
 
-        <footer className="mt-16 pt-6 border-t border-sky-soft/30 text-xs text-cloud-dim/70">
-          Dados meteorológicos via{' '}
+        {route.kind === 'about' && (
+          <Suspense fallback={<ViewFallback />}>
+            <AboutPage onBack={() => navigate({ kind: 'home' })} />
+          </Suspense>
+        )}
+
+        <footer className="mt-16 pt-6 border-t border-sky-soft/30 text-xs text-cloud-dim/70 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>
+            Dados via{' '}
+            <a
+              href="https://open-meteo.com/"
+              className="underline hover:text-cloud"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open-Meteo
+            </a>{' '}
+            (ECMWF). Heurística amadora — informação, não garantia.
+          </span>
+          <span aria-hidden>·</span>
           <a
-            href="https://open-meteo.com/"
+            href="/sobre"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate({ kind: 'about' });
+            }}
             className="underline hover:text-cloud"
+          >
+            Sobre o site
+          </a>
+          <span aria-hidden>·</span>
+          <a
+            href="https://github.com/ThiagoBauken/mardenuvens"
             target="_blank"
             rel="noreferrer"
+            className="underline hover:text-cloud"
           >
-            Open-Meteo
-          </a>{' '}
-          (modelo ECMWF). Algoritmo heurístico — para informação, não para decisões críticas.
+            GitHub
+          </a>
         </footer>
       </main>
     </div>

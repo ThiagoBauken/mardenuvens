@@ -20,6 +20,7 @@ export async function seoRoutes(app: FastifyInstance): Promise<void> {
     const today = new Date().toISOString().slice(0, 10);
     const urls: string[] = [
       url('/', today, '1.0'),
+      url('/sobre', today, '0.6'),
     ];
     for (const m of MOUNTAINS) {
       urls.push(url(`/m/${encodeURIComponent(m.id)}`, today, '0.8'));
