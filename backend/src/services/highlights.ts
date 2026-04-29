@@ -1,16 +1,15 @@
 import { MOUNTAINS } from '../data/mountains.js';
-import { getForecastFor } from './forecast.js';
+import { getForecastsBatch } from './forecast.js';
 import { TTLCache } from '../cache.js';
 import type {
-  Mountain,
   MountainPublic,
   BestWindow,
   Verdict,
   DayForecast,
+  ForecastResponse,
 } from '../types.js';
 
 const HIGHLIGHTS_TTL_MS = 30 * 60 * 1000;
-const CONCURRENCY = 16;
 
 export interface HighlightItem {
   mountain: MountainPublic;
@@ -54,14 +53,14 @@ export async function refreshHighlights(): Promise<HighlightsResponse> {
 }
 
 async function compute(): Promise<HighlightsResponse> {
+  const forecasts = await getForecastsBatch(MOUNTAINS);
   const items: HighlightItem[] = [];
 
-  for (let i = 0; i < MOUNTAINS.length; i += CONCURRENCY) {
-    const batch = MOUNTAINS.slice(i, i + CONCURRENCY);
-    const results = await Promise.allSettled(batch.map(buildHighlight));
-    for (const r of results) {
-      if (r.status === 'fulfilled' && r.value) items.push(r.value);
-    }
+  for (const mountain of MOUNTAINS) {
+    const forecast = forecasts.get(mountain.id);
+    if (!forecast) continue;
+    const item = pickBestDay(mountain.id, forecast);
+    if (item) items.push(item);
   }
 
   items.sort((a, b) => {
@@ -79,39 +78,34 @@ async function compute(): Promise<HighlightsResponse> {
   return response;
 }
 
-async function buildHighlight(mountain: Mountain): Promise<HighlightItem | null> {
-  try {
-    const forecast = await getForecastFor(mountain);
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const candidates = forecast.days.filter(
-      (d) => d.date >= todayStr && (d.verdict === 'SIM' || d.verdict === 'PROVAVEL'),
-    );
-    if (candidates.length === 0) return null;
+function pickBestDay(_mountainId: string, forecast: ForecastResponse): HighlightItem | null {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const candidates = forecast.days.filter(
+    (d) => d.date >= todayStr && (d.verdict === 'SIM' || d.verdict === 'PROVAVEL'),
+  );
+  if (candidates.length === 0) return null;
 
-    const best = candidates.reduce<DayForecast>((acc, cur) => {
-      if (cur.score > acc.score) return cur;
-      if (cur.score === acc.score && cur.date < acc.date) return cur;
-      return acc;
-    }, candidates[0]!);
+  const best = candidates.reduce<DayForecast>((acc, cur) => {
+    if (cur.score > acc.score) return cur;
+    if (cur.score === acc.score && cur.date < acc.date) return cur;
+    return acc;
+  }, candidates[0]!);
 
-    return {
-      mountain: {
-        id: mountain.id,
-        name: mountain.name,
-        city: mountain.city,
-        state: mountain.state,
-        elevationM: mountain.elevationM,
-        type: mountain.type,
-        tags: mountain.tags ?? [],
-      },
-      bestDay: {
-        date: best.date,
-        verdict: best.verdict,
-        score: best.score,
-        bestWindow: best.bestWindow,
-      },
-    };
-  } catch {
-    return null;
-  }
+  return {
+    mountain: {
+      id: forecast.mountain.id,
+      name: forecast.mountain.name,
+      city: forecast.mountain.city,
+      state: forecast.mountain.state,
+      elevationM: forecast.mountain.elevationM,
+      type: forecast.mountain.type,
+      tags: forecast.mountain.tags ?? [],
+    },
+    bestDay: {
+      date: best.date,
+      verdict: best.verdict,
+      score: best.score,
+      bestWindow: best.bestWindow,
+    },
+  };
 }

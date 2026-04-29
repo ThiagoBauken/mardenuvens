@@ -28,6 +28,15 @@ db.exec(`
 
   CREATE UNIQUE INDEX IF NOT EXISTS uniq_reports_per_ip_per_day
     ON reports(mountain_id, report_date, ip_hash);
+
+  CREATE TABLE IF NOT EXISTS forecast_cache (
+    mountain_id TEXT PRIMARY KEY,
+    payload     TEXT NOT NULL,
+    expires_at  INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_forecast_cache_expires
+    ON forecast_cache(expires_at);
 `);
 
 export interface ReportRow {
@@ -137,4 +146,48 @@ export function summaryForDate(mountainId: string, reportDate: string): {
 export function countRecentReportsByIp(ipHash: string, sinceISO: string): number {
   const row = countByIpRecentStmt.get(ipHash, sinceISO) as { n: number } | undefined;
   return row?.n ?? 0;
+}
+
+// ─── Forecast cache (camada persistente entre restarts) ─────────────────────
+
+const upsertForecastStmt = db.prepare<[string, string, number]>(`
+  INSERT INTO forecast_cache (mountain_id, payload, expires_at)
+  VALUES (?, ?, ?)
+  ON CONFLICT(mountain_id) DO UPDATE SET
+    payload = excluded.payload,
+    expires_at = excluded.expires_at
+`);
+
+const selectForecastStmt = db.prepare<[string]>(`
+  SELECT payload, expires_at FROM forecast_cache WHERE mountain_id = ?
+`);
+
+const pruneForecastStmt = db.prepare<[number]>(`
+  DELETE FROM forecast_cache WHERE expires_at < ?
+`);
+
+export function readForecastCache<T>(mountainId: string): T | null {
+  const row = selectForecastStmt.get(mountainId) as
+    | { payload: string; expires_at: number }
+    | undefined;
+  if (!row) return null;
+  if (row.expires_at < Date.now()) return null;
+  try {
+    return JSON.parse(row.payload) as T;
+  } catch {
+    return null;
+  }
+}
+
+export function writeForecastCache<T>(
+  mountainId: string,
+  payload: T,
+  ttlMs: number,
+): void {
+  upsertForecastStmt.run(mountainId, JSON.stringify(payload), Date.now() + ttlMs);
+}
+
+export function pruneExpiredForecastCache(): number {
+  const result = pruneForecastStmt.run(Date.now());
+  return result.changes ?? 0;
 }

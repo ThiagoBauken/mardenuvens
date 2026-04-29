@@ -10,6 +10,7 @@ import { reportsRoutes } from './routes/reports.js';
 import { highlightsRoutes } from './routes/highlights.js';
 import { seoRoutes } from './routes/seo.js';
 import { getHighlights, refreshHighlights } from './services/highlights.js';
+import { startForecastCachePruner } from './services/forecast.js';
 
 const PORT = Number(process.env.PORT ?? 7777);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -73,6 +74,9 @@ async function main(): Promise<void> {
       .then((r) => app.log.info(`Refresh do /api/highlights: ${r.count} destinos`))
       .catch((err) => app.log.warn({ err }, 'Refresh do /api/highlights falhou'));
   }, 25 * 60 * 1000);
+
+  // Limpa entradas expiradas do cache em SQLite a cada 6h
+  startForecastCachePruner();
 }
 
 function resolveDefaultFrontendDir(): string {

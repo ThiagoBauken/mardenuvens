@@ -62,9 +62,29 @@ export async function fetchForecast(
   lon: number,
   options: FetchOptions = {},
 ): Promise<ParsedForecast> {
+  const [first] = await fetchForecastBatch([{ lat, lon }], options);
+  if (!first) throw new OpenMeteoError('Open-Meteo retornou resposta vazia');
+  return first;
+}
+
+/**
+ * Versão batched: pede previsão para múltiplas coordenadas numa única
+ * requisição HTTP. Open-Meteo aceita listas separadas por vírgula nos
+ * parâmetros `latitude` e `longitude` e devolve um array de respostas
+ * (mesma estrutura do endpoint single, mas em array).
+ *
+ * Reduz ~150 round-trips a uma dezena por warmup. Limite prático: ~25 pontos
+ * por chamada (URL fica longa). Aqui usamos 20 pra margem.
+ */
+export async function fetchForecastBatch(
+  points: Array<{ lat: number; lon: number }>,
+  options: FetchOptions = {},
+): Promise<ParsedForecast[]> {
+  if (points.length === 0) return [];
+
   const params = new URLSearchParams({
-    latitude: lat.toString(),
-    longitude: lon.toString(),
+    latitude: points.map((p) => p.lat.toString()).join(','),
+    longitude: points.map((p) => p.lon.toString()).join(','),
     hourly: buildHourlyParam(),
     timezone: 'auto',
     forecast_days: String(options.forecastDays ?? 7),
@@ -88,8 +108,10 @@ export async function fetchForecast(
     );
   }
 
-  const data = (await response.json()) as OpenMeteoResponse;
-  return parseResponse(data);
+  const raw = await response.json();
+  // Multi-location → array; single → objeto. Normaliza pra array.
+  const items = (Array.isArray(raw) ? raw : [raw]) as OpenMeteoResponse[];
+  return items.map(parseResponse);
 }
 
 /**
