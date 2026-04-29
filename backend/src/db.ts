@@ -32,12 +32,27 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS forecast_cache (
     mountain_id TEXT PRIMARY KEY,
     payload     TEXT NOT NULL,
+    stale_at    INTEGER NOT NULL,
     expires_at  INTEGER NOT NULL
   );
 
   CREATE INDEX IF NOT EXISTS idx_forecast_cache_expires
     ON forecast_cache(expires_at);
 `);
+
+// Migração simples: adiciona stale_at se a tabela existia sem essa coluna.
+try {
+  const cols = db
+    .prepare('PRAGMA table_info(forecast_cache)')
+    .all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'stale_at')) {
+    db.exec(
+      'ALTER TABLE forecast_cache ADD COLUMN stale_at INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+} catch {
+  // best-effort
+}
 
 export interface ReportRow {
   id: number;
@@ -150,30 +165,44 @@ export function countRecentReportsByIp(ipHash: string, sinceISO: string): number
 
 // ─── Forecast cache (camada persistente entre restarts) ─────────────────────
 
-const upsertForecastStmt = db.prepare<[string, string, number]>(`
-  INSERT INTO forecast_cache (mountain_id, payload, expires_at)
-  VALUES (?, ?, ?)
+const upsertForecastStmt = db.prepare<[string, string, number, number]>(`
+  INSERT INTO forecast_cache (mountain_id, payload, stale_at, expires_at)
+  VALUES (?, ?, ?, ?)
   ON CONFLICT(mountain_id) DO UPDATE SET
     payload = excluded.payload,
+    stale_at = excluded.stale_at,
     expires_at = excluded.expires_at
 `);
 
 const selectForecastStmt = db.prepare<[string]>(`
-  SELECT payload, expires_at FROM forecast_cache WHERE mountain_id = ?
+  SELECT payload, stale_at, expires_at FROM forecast_cache WHERE mountain_id = ?
 `);
 
 const pruneForecastStmt = db.prepare<[number]>(`
   DELETE FROM forecast_cache WHERE expires_at < ?
 `);
 
-export function readForecastCache<T>(mountainId: string): T | null {
+export interface CachedForecast<T> {
+  value: T;
+  /** true se a entrada ainda é válida mas passou do stale_at — pode revalidar em bg. */
+  isStale: boolean;
+}
+
+/**
+ * Retorna a entrada se ainda dentro do TTL absoluto (expires_at). Se passou de
+ * stale_at mas ainda não expirou, retorna marcando isStale=true — caller pode
+ * decidir entre servir + revalidar (SWR) ou bloquear.
+ */
+export function readForecastCache<T>(mountainId: string): CachedForecast<T> | null {
   const row = selectForecastStmt.get(mountainId) as
-    | { payload: string; expires_at: number }
+    | { payload: string; stale_at: number; expires_at: number }
     | undefined;
   if (!row) return null;
-  if (row.expires_at < Date.now()) return null;
+  const now = Date.now();
+  if (row.expires_at < now) return null;
   try {
-    return JSON.parse(row.payload) as T;
+    const value = JSON.parse(row.payload) as T;
+    return { value, isStale: row.stale_at < now };
   } catch {
     return null;
   }
@@ -182,9 +211,16 @@ export function readForecastCache<T>(mountainId: string): T | null {
 export function writeForecastCache<T>(
   mountainId: string,
   payload: T,
-  ttlMs: number,
+  staleMs: number,
+  maxAgeMs: number = staleMs * 6,
 ): void {
-  upsertForecastStmt.run(mountainId, JSON.stringify(payload), Date.now() + ttlMs);
+  const now = Date.now();
+  upsertForecastStmt.run(
+    mountainId,
+    JSON.stringify(payload),
+    now + staleMs,
+    now + maxAgeMs,
+  );
 }
 
 export function pruneExpiredForecastCache(): number {

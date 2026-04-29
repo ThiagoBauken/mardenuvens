@@ -29,6 +29,8 @@ export async function reportsRoutes(app: FastifyInstance): Promise<void> {
       reply.code(404);
       return { error: 'Montanha não encontrada', id };
     }
+    // Conteúdo muda a cada novo relato; cache curto + revalidação ajuda.
+    reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
     return { reports: listReports(id, 50) };
   });
 
@@ -44,6 +46,7 @@ export async function reportsRoutes(app: FastifyInstance): Promise<void> {
         reply.code(400);
         return { error: 'Formato de data inválido (use YYYY-MM-DD)' };
       }
+      reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
       return {
         reports: listReportsForDate(id, date),
         summary: summaryForDate(id, date),

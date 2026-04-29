@@ -1,5 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import compress from '@fastify/compress';
+import helmet from '@fastify/helmet';
+import etag from '@fastify/etag';
 import fastifyStatic from '@fastify/static';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,15 +18,40 @@ import { startForecastCachePruner } from './services/forecast.js';
 const PORT = Number(process.env.PORT ?? 7777);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const FRONTEND_DIR = process.env.FRONTEND_DIR ?? resolveDefaultFrontendDir();
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? 'https://mardenuvens.com.br';
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 async function main(): Promise<void> {
   const app = Fastify({
     logger: true,
     trustProxy: true,
-    bodyLimit: 50 * 1024, // 50KB — suficiente p/ formulário de report; bloqueia abuso
+    bodyLimit: 50 * 1024,
   });
 
-  await app.register(cors, { origin: true });
+  // Security headers (CSP, X-Frame-Options, HSTS, etc).
+  // contentSecurityPolicy desabilitado pra não quebrar inline scripts/styles do
+  // Vite dev e do JSON-LD que injetamos no index.html. Em produção real, vale
+  // configurar uma política específica.
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  });
+
+  // Compressão gzip/brotli — reduz payloads JSON em 70-80%.
+  await app.register(compress, {
+    encodings: ['br', 'gzip', 'deflate'],
+    threshold: 1024, // só comprime acima de 1KB
+  });
+
+  // ETag automático em todas as respostas 200 com body.
+  await app.register(etag);
+
+  // CORS: em prod, só aceita o domínio público; em dev, libera local + tools.
+  await app.register(cors, {
+    origin: IS_PROD
+      ? [PUBLIC_BASE_URL, PUBLIC_BASE_URL.replace('https://', 'https://www.')]
+      : true,
+  });
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -33,26 +61,34 @@ async function main(): Promise<void> {
   await app.register(reportsRoutes);
   await app.register(seoRoutes);
 
-  // Serve o frontend estático se a pasta existir (modo produção).
-  // Em dev, o Vite roda separado e o frontend não está empacotado aqui.
   if (existsSync(FRONTEND_DIR)) {
     app.log.info(`Servindo frontend estático de ${FRONTEND_DIR}`);
     await app.register(fastifyStatic, {
       root: FRONTEND_DIR,
       prefix: '/',
       wildcard: false,
+      // Cache aggressive nos assets versionados (Vite hash no nome); HTML curto.
+      setHeaders: (res, path) => {
+        if (path.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else if (path.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'public, max-age=300');
+        }
+      },
     });
 
     const indexPath = resolve(FRONTEND_DIR, 'index.html');
     const indexHtml = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : null;
     if (indexHtml) {
-      // SPA fallback: qualquer rota não-API que não seja arquivo retorna o index.html.
       app.setNotFoundHandler((request, reply) => {
         if (request.url.startsWith('/api/') || request.url.startsWith('/health')) {
           reply.code(404).send({ error: 'Not found', url: request.url });
           return;
         }
-        reply.type('text/html').send(indexHtml);
+        reply
+          .type('text/html')
+          .header('Cache-Control', 'public, max-age=300')
+          .send(indexHtml);
       });
     }
   } else {
@@ -61,27 +97,20 @@ async function main(): Promise<void> {
 
   await app.listen({ port: PORT, host: HOST });
 
-  // Warmup do carrossel da landing em background — primeira request fica
-  // instantânea em vez de esperar 154 chamadas Open-Meteo.
   void getHighlights()
     .then((r) => app.log.info(`Warmup do /api/highlights ok: ${r.count} destinos`))
-    .catch((err) => app.log.warn({ err }, 'Warmup do /api/highlights falhou (recupera no primeiro request)'));
+    .catch((err) => app.log.warn({ err }, 'Warmup do /api/highlights falhou'));
 
-  // Re-aquece o cache periodicamente (a cada 25 min) para nunca expirar
-  // durante uso normal e sempre ter dados frescos.
   setInterval(() => {
     void refreshHighlights()
       .then((r) => app.log.info(`Refresh do /api/highlights: ${r.count} destinos`))
       .catch((err) => app.log.warn({ err }, 'Refresh do /api/highlights falhou'));
   }, 25 * 60 * 1000);
 
-  // Limpa entradas expiradas do cache em SQLite a cada 6h
   startForecastCachePruner();
 }
 
 function resolveDefaultFrontendDir(): string {
-  // Quando empacotado, server.js fica em /app/dist e o frontend em /app/public.
-  // Em dev, este arquivo TS roda via tsx; tentamos /backend/../frontend/dist.
   try {
     const here = dirname(fileURLToPath(import.meta.url));
     const candidates = [

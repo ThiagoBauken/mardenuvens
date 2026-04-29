@@ -1,8 +1,22 @@
+import { lazy, Suspense } from 'react';
 import { MountainPicker } from './components/MountainPicker';
-import { ForecastView } from './components/ForecastView';
-import { ComparisonView } from './components/ComparisonView';
-import { Highlights } from './components/Highlights';
 import { useHashRoute } from './lib/router';
+
+// Lazy-loaded: views entram no bundle só quando o usuário navega pra elas.
+// Reduz o JS inicial de ~172KB pra ~80KB.
+const ForecastView = lazy(() =>
+  import('./components/ForecastView').then((m) => ({ default: m.ForecastView })),
+);
+const ComparisonView = lazy(() =>
+  import('./components/ComparisonView').then((m) => ({ default: m.ComparisonView })),
+);
+const Highlights = lazy(() =>
+  import('./components/Highlights').then((m) => ({ default: m.Highlights })),
+);
+
+function ViewFallback(): JSX.Element {
+  return <div className="text-cloud-dim animate-pulse">Carregando…</div>;
+}
 
 export function App(): JSX.Element {
   const [route, navigate] = useHashRoute();
@@ -20,7 +34,9 @@ export function App(): JSX.Element {
                 Previsão para morros, picos, serras, cânions e mirantes do Brasil. Escolha o destino:
               </p>
             </header>
-            <Highlights onSelect={(id) => navigate({ kind: 'mountain', id })} />
+            <Suspense fallback={null}>
+              <Highlights onSelect={(id) => navigate({ kind: 'mountain', id })} />
+            </Suspense>
             <MountainPicker
               onSelect={(id) => navigate({ kind: 'mountain', id })}
               onCompare={(ids) => navigate({ kind: 'compare', ids })}
@@ -29,18 +45,22 @@ export function App(): JSX.Element {
         )}
 
         {route.kind === 'mountain' && (
-          <ForecastView
-            mountainId={route.id}
-            onBack={() => navigate({ kind: 'home' })}
-          />
+          <Suspense fallback={<ViewFallback />}>
+            <ForecastView
+              mountainId={route.id}
+              onBack={() => navigate({ kind: 'home' })}
+            />
+          </Suspense>
         )}
 
         {route.kind === 'compare' && (
-          <ComparisonView
-            ids={route.ids}
-            onBack={() => navigate({ kind: 'home' })}
-            onOpen={(id) => navigate({ kind: 'mountain', id })}
-          />
+          <Suspense fallback={<ViewFallback />}>
+            <ComparisonView
+              ids={route.ids}
+              onBack={() => navigate({ kind: 'home' })}
+              onOpen={(id) => navigate({ kind: 'mountain', id })}
+            />
+          </Suspense>
         )}
 
         <footer className="mt-16 pt-6 border-t border-sky-soft/30 text-xs text-cloud-dim/70">
