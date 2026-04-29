@@ -9,7 +9,12 @@ build/
 .cache/
 coverage/
 .claude/
-data/
-**/data/*.db*
+
+# SQLite local de desenvolvimento — só o diretório ./data na raiz e ./backend/data
+/data/
+/backend/data/
 *.sqlite
 *.sqlite-journal
+*.db
+*.db-shm
+*.db-wal
