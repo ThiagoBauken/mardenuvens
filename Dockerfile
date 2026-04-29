@@ -43,11 +43,12 @@ ENV NODE_ENV=production \
     DB_PATH=/app/data/ceunuvens.db \
     FRONTEND_DIR=/app/public
 
-# Manifests + node_modules (prod-only) com better-sqlite3 já compilado p/ alpine
+# Manifests + node_modules (prod-only) com better-sqlite3 já compilado p/ alpine.
+# npm workspaces faz hoist de todas as deps p/ /app/node_modules — backend/node_modules
+# normalmente não existe, então o Node resolve módulos subindo até o root.
 COPY --from=builder --chown=app:app /app/package.json /app/package-lock.json* ./
 COPY --from=builder --chown=app:app /app/node_modules ./node_modules
 COPY --from=builder --chown=app:app /app/backend/package.json ./backend/
-COPY --from=builder --chown=app:app /app/backend/node_modules ./backend/node_modules
 
 # Build do backend (JS gerado pelo tsc)
 COPY --from=builder --chown=app:app /app/backend/dist ./backend/dist
