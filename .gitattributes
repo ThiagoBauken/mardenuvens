@@ -1,0 +1,23 @@
+# Garante line endings consistentes (LF) em todos os SO.
+# Crítico para Docker em Linux: shell scripts, Dockerfile, JSON, JS/TS
+# precisam ser LF mesmo se editados no Windows.
+
+* text=auto eol=lf
+
+# Binários — não converter
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.zip binary
+*.tar binary
+*.tar.gz binary
+*.tgz binary
+*.db binary
+*.sqlite binary
