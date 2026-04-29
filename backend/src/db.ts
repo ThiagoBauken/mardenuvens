@@ -38,6 +38,23 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_forecast_cache_expires
     ON forecast_cache(expires_at);
+
+  CREATE TABLE IF NOT EXISTS forecast_snapshots (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    mountain_id  TEXT NOT NULL,
+    for_date     TEXT NOT NULL,
+    capture_day  TEXT NOT NULL,
+    captured_at  TEXT NOT NULL,
+    verdict      TEXT NOT NULL,
+    score        REAL NOT NULL,
+    UNIQUE (mountain_id, for_date, capture_day)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_snapshots_for_date
+    ON forecast_snapshots(for_date);
+
+  CREATE INDEX IF NOT EXISTS idx_snapshots_mountain
+    ON forecast_snapshots(mountain_id);
 `);
 
 // Migração simples: adiciona stale_at se a tabela existia sem essa coluna.
@@ -226,4 +243,103 @@ export function writeForecastCache<T>(
 export function pruneExpiredForecastCache(): number {
   const result = pruneForecastStmt.run(Date.now());
   return result.changes ?? 0;
+}
+
+// ─── Forecast snapshots (histórico p/ medir acurácia) ───────────────────────
+
+const upsertSnapshotStmt = db.prepare<
+  [string, string, string, string, string, number]
+>(`
+  INSERT INTO forecast_snapshots
+    (mountain_id, for_date, capture_day, captured_at, verdict, score)
+  VALUES (?, ?, ?, ?, ?, ?)
+  ON CONFLICT(mountain_id, for_date, capture_day) DO UPDATE SET
+    captured_at = excluded.captured_at,
+    verdict     = excluded.verdict,
+    score       = excluded.score
+`);
+
+const lastSnapshotBeforeStmt = db.prepare<[string, string, string]>(`
+  SELECT verdict, score, captured_at, capture_day
+  FROM forecast_snapshots
+  WHERE mountain_id = ? AND for_date = ? AND capture_day <= ?
+  ORDER BY captured_at DESC
+  LIMIT 1
+`);
+
+const reportSummaryStmt = db.prepare<[string, string]>(`
+  SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN happened = 1 THEN 1 ELSE 0 END) AS yes_count
+  FROM reports
+  WHERE mountain_id = ? AND report_date = ?
+`);
+
+const evaluablePairsStmt = db.prepare(`
+  SELECT DISTINCT s.mountain_id AS mountain_id, s.for_date AS for_date
+  FROM forecast_snapshots s
+  INNER JOIN reports r
+    ON r.mountain_id = s.mountain_id AND r.report_date = s.for_date
+`);
+
+export interface SnapshotRow {
+  verdict: string;
+  score: number;
+  captured_at: string;
+  capture_day: string;
+}
+
+export function upsertForecastSnapshot(input: {
+  mountainId: string;
+  forDate: string;
+  captureDay: string;
+  capturedAt: string;
+  verdict: string;
+  score: number;
+}): void {
+  upsertSnapshotStmt.run(
+    input.mountainId,
+    input.forDate,
+    input.captureDay,
+    input.capturedAt,
+    input.verdict,
+    input.score,
+  );
+}
+
+export function lastSnapshotBefore(
+  mountainId: string,
+  forDate: string,
+  captureDayUpperBound: string,
+): SnapshotRow | null {
+  const row = lastSnapshotBeforeStmt.get(
+    mountainId,
+    forDate,
+    captureDayUpperBound,
+  ) as SnapshotRow | undefined;
+  return row ?? null;
+}
+
+export function reportSummary(
+  mountainId: string,
+  reportDate: string,
+): { total: number; yesCount: number } {
+  const row = reportSummaryStmt.get(mountainId, reportDate) as
+    | { total: number; yes_count: number | null }
+    | undefined;
+  return {
+    total: row?.total ?? 0,
+    yesCount: row?.yes_count ?? 0,
+  };
+}
+
+export function listEvaluablePairs(): Array<{
+  mountainId: string;
+  forDate: string;
+}> {
+  const rows = evaluablePairsStmt.all() as Array<{
+    mountain_id: string;
+    for_date: string;
+  }>;
+  return rows.map((r) => ({ mountainId: r.mountain_id, forDate: r.for_date }));
 }

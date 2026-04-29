@@ -12,8 +12,10 @@ import { forecastRoutes } from './routes/forecast.js';
 import { reportsRoutes } from './routes/reports.js';
 import { highlightsRoutes } from './routes/highlights.js';
 import { seoRoutes } from './routes/seo.js';
+import { accuracyRoutes } from './routes/accuracy.js';
 import { getHighlights, refreshHighlights } from './services/highlights.js';
 import { startForecastCachePruner } from './services/forecast.js';
+import { captureSnapshots, startSnapshotCron } from './services/snapshots.js';
 
 const PORT = Number(process.env.PORT ?? 7777);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -59,6 +61,7 @@ async function main(): Promise<void> {
   await app.register(forecastRoutes);
   await app.register(highlightsRoutes);
   await app.register(reportsRoutes);
+  await app.register(accuracyRoutes);
   await app.register(seoRoutes);
 
   if (existsSync(FRONTEND_DIR)) {
@@ -108,6 +111,15 @@ async function main(): Promise<void> {
   }, 25 * 60 * 1000);
 
   startForecastCachePruner();
+
+  // Captura snapshot histórico das previsões pra medir acurácia depois.
+  // Roda no boot (best-effort, espera o warmup terminar primeiro) e a cada 24h.
+  setTimeout(() => {
+    void captureSnapshots()
+      .then((r) => app.log.info(`Snapshot inicial: ${r.rows} linhas em ${r.destinations} destinos`))
+      .catch((err) => app.log.warn({ err }, 'Snapshot inicial falhou'));
+  }, 30_000);
+  startSnapshotCron();
 }
 
 function resolveDefaultFrontendDir(): string {
